@@ -12,16 +12,16 @@ class ResumeContextResponse(ResumeContextBase):
     class Config:
         from_attributes = True
 
-class GeneratedResumeBase(BaseModel):
+class GeneratedResumeCreate(BaseModel):
     job_description: str
     custom_instructions: Optional[str] = None
     title: str
-    status: str
 
-class GeneratedResumeResponse(GeneratedResumeBase):
+class GeneratedResumeResponse(GeneratedResumeCreate):
     id: int
     base_context_id: int
     generated_markdown: Optional[str] = None
+    status: str
     created_at: datetime
     class Config:
         from_attributes = True

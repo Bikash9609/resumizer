@@ -26,18 +26,14 @@ export default function Dashboard() {
   const [customInstructions, setCustomInstructions] = useState('');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [activeBaseId, setActiveBaseId] = useState(0);
-  const [userId, setUserId] = useState(0);
+  const [activeBaseId] = useState(() => parseInt(localStorage.getItem('resumizer_base_id') || '0'));
+  const [userId] = useState(() => parseInt(localStorage.getItem('resumizer_user_id') || '0'));
 
   useEffect(() => {
-    const storedBaseId = parseInt(localStorage.getItem('resumizer_base_id') || '0');
-    const storedUserId = parseInt(localStorage.getItem('resumizer_user_id') || '0');
-    setActiveBaseId(storedBaseId);
-    setUserId(storedUserId);
-  }, []);
-
-  useEffect(() => {
-    if (!userId) { navigate('/'); return; }
+    if (!userId) {
+      navigate('/');
+      return;
+    }
     loadData();
     const interval = setInterval(() => loadData(true), 5000);
     return () => clearInterval(interval);

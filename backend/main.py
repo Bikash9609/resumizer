@@ -4,10 +4,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import uuid
 
-import models, schemas
+import models
+import schemas
 from database import engine, get_db
 from utils import extract_text_from_pdf
 from ai_service import generate_tailored_resume
+from fastapi.responses import StreamingResponse
+from formatters import generate_pdf_from_markdown, generate_docx_from_markdown
 
 # Create all tables in the database
 models.Base.metadata.create_all(bind=engine)
@@ -98,13 +101,16 @@ def _generate_task(gen_id: int, base_text: str, jd: str, instructions: str, db_s
     resume = db_session.query(models.GeneratedResume).filter(models.GeneratedResume.id == gen_id).first()
     if resume:
         resume.generated_markdown = result
-        resume.status = "completed"
+        if result == "Error generating resume.":
+            resume.status = "failed"
+        else:
+            resume.status = "completed"
         db_session.commit()
     db_session.close()
 
 @app.post("/api/resumes/generate", response_model=schemas.GeneratedResumeResponse)
 def generate_resume(
-    request: schemas.GeneratedResumeBase, 
+    request: schemas.GeneratedResumeCreate, 
     base_context_id: int, 
     background_tasks: BackgroundTasks, 
     db: Session = Depends(get_db)
@@ -135,9 +141,9 @@ def generate_resume(
         request.custom_instructions or "", 
         bg_db
     )
+
+    return new_gen
     
-from fastapi.responses import StreamingResponse
-from formatters import generate_pdf_from_markdown, generate_docx_from_markdown
 
 @app.get("/api/resumes/{generated_id}/download")
 def download_resume(generated_id: int, format: str = "pdf", db: Session = Depends(get_db)):

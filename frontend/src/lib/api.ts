@@ -36,8 +36,7 @@ export const generateResume = async (baseContextId: number, jd: string, instruct
   const res = await api.post(`/resumes/generate?base_context_id=${baseContextId}`, {
     job_description: jd,
     custom_instructions: instructions,
-    title,
-    status: 'generating'
+    title
   });
   return res.data;
 };
