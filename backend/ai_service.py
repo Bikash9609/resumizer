@@ -1,5 +1,6 @@
 import yaml
 from pydantic import BaseModel
+import litellm
 
 
 class PromptConfig(BaseModel):
@@ -19,22 +20,25 @@ def load_prompts(yaml_path: str = "prompts.yaml") -> PromptConfig:
     )
 
 
-import litellm
+
 
 
 def generate_tailored_resume(
-    base_resume_text: str, job_description: str, custom_instructions: str = ""
+    base_resume_text: str, job_description: str, custom_instructions: str = "", template_type: str = "standard"
 ) -> str:
     """
     Leverages LiteLLM to generate a strict, ATS-optimized tailored resume.
     """
     config = load_prompts()
 
+    # Append template specific instructions
+    template_instructions = f"\nPlease ensure the output is structured to suit a '{template_type}' resume format. Keep the markdown semantic but adjust verbosity and sections appropriately if needed."
+
     # Format the user prompt
     user_prompt = config.user_prompt_template.format(
         job_description=job_description,
         base_resume=base_resume_text,
-        custom_instructions=custom_instructions,
+        custom_instructions=custom_instructions + template_instructions,
     )
 
     messages = [

@@ -16,6 +16,7 @@ class GeneratedResumeCreate(BaseModel):
     job_description: str
     custom_instructions: Optional[str] = None
     title: str
+    template_type: str = "standard"
 
 class GeneratedResumeResponse(GeneratedResumeCreate):
     id: int

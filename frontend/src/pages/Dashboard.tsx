@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box, Group, Text, Title, Button, ActionIcon, Badge,
   Container, Paper, Stack, Loader, Textarea, TextInput,
-  Modal, Divider, useMantineColorScheme, Tooltip,
+  Modal, Divider, useMantineColorScheme, Tooltip, Select
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [modalOpen, setModalOpen] = useState(false);
   const [jdText, setJdText] = useState('');
   const [customInstructions, setCustomInstructions] = useState('');
+  const [templateType, setTemplateType] = useState('standard');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [activeBaseId] = useState(() => parseInt(localStorage.getItem('resumizer_base_id') || '0'));
@@ -61,7 +62,7 @@ export default function Dashboard() {
     setGeneratedResumes(prev => [{ id: tempId, title: 'AI Tailored Resume', status: 'generating', created_at: new Date().toISOString() }, ...prev]);
 
     try {
-      await generateResume(activeBaseId, jdText, customInstructions, 'AI Tailored Resume');
+      await generateResume(activeBaseId, jdText, customInstructions, 'AI Tailored Resume', templateType);
       setJdText('');
       setCustomInstructions('');
       await loadData();
@@ -286,6 +287,21 @@ export default function Dashboard() {
             radius="md"
             value={customInstructions}
             onChange={e => setCustomInstructions(e.target.value)}
+          />
+
+          <Select
+            label="Resume Template"
+            description="Select the visual layout of your resume"
+            radius="md"
+            value={templateType}
+            onChange={(value) => setTemplateType(value || 'standard')}
+            data={[
+              { value: 'standard', label: 'Standard' },
+              { value: 'modern', label: 'Modern (Blue Accents)' },
+              { value: 'compact', label: 'Compact (Space Saving)' },
+              { value: 'creative', label: 'Creative (Serif, Red Accents)' },
+              { value: 'executive', label: 'Executive (Classic Serif)' },
+            ]}
           />
 
           <Group justify="flex-end" mt="xs">

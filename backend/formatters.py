@@ -2,10 +2,24 @@ from markdown_pdf import MarkdownPdf, Section
 from docx import Document
 import io
 
-def generate_pdf_from_markdown(markdown_content: str) -> io.BytesIO:
+def generate_pdf_from_markdown(markdown_content: str, template_type: str = "standard") -> io.BytesIO:
     """Creates a PDF from a Markdown string."""
+    styles = ""
+    if template_type == "modern":
+        styles = "<style>body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #333; line-height: 1.6; } h1 { color: #2c3e50; border-bottom: 2px solid #3498db; } h2 { color: #2980b9; }</style>\n\n"
+    elif template_type == "compact":
+        styles = "<style>body { font-family: 'Arial', sans-serif; line-height: 1.2; font-size: 11pt; } h1, h2, h3 { margin-bottom: 2px; margin-top: 5px; } p, ul { margin-bottom: 5px; margin-top: 5px; }</style>\n\n"
+    elif template_type == "creative":
+        styles = "<style>body { font-family: 'Georgia', serif; color: #444; } h1 { color: #e74c3c; text-align: center; font-size: 2.2em; text-transform: uppercase; letter-spacing: 2px; } h2 { color: #c0392b; border-bottom: 1px dashed #e74c3c; }</style>\n\n"
+    elif template_type == "executive":
+        styles = "<style>body { font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, serif; line-height: 1.5; color: #222; } h1 { font-size: 2em; text-align: center; letter-spacing: 1px; } h2 { border-bottom: 1px solid #000; text-transform: uppercase; font-size: 1.2em; }</style>\n\n"
+    else: # standard
+        styles = "<style>body { font-family: 'Times New Roman', Times, serif; line-height: 1.4; color: #000; } h1, h2 { border-bottom: 1px solid #ccc; }</style>\n\n"
+        
+    styled_content = f"{styles}{markdown_content}"
+
     pdf = MarkdownPdf(toc_level=2)
-    pdf.add_section(Section(markdown_content))
+    pdf.add_section(Section(styled_content))
     
     # Save to a bytes buffer
     buffer = io.BytesIO()

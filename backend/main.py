@@ -94,9 +94,9 @@ def get_resumes(user_id: int, db: Session = Depends(get_db)):
     return {"resumes": contexts, "generated": generated}
 
 
-def _generate_task(gen_id: int, base_text: str, jd: str, instructions: str, db_session: Session):
+def _generate_task(gen_id: int, base_text: str, jd: str, instructions: str, template_type: str, db_session: Session):
     """Background task to call LLM and update generated resume status."""
-    result = generate_tailored_resume(base_text, jd, instructions)
+    result = generate_tailored_resume(base_text, jd, instructions, template_type)
     
     resume = db_session.query(models.GeneratedResume).filter(models.GeneratedResume.id == gen_id).first()
     if resume:
@@ -125,6 +125,7 @@ def generate_resume(
         job_description=request.job_description,
         custom_instructions=request.custom_instructions or "",
         title=request.title,
+        template_type=request.template_type,
         status="generating"
     )
     db.add(new_gen)
@@ -139,6 +140,7 @@ def generate_resume(
         ctx.extracted_text, 
         request.job_description, 
         request.custom_instructions or "", 
+        request.template_type,
         bg_db
     )
 
@@ -162,7 +164,7 @@ def download_resume(generated_id: int, format: str = "pdf", db: Session = Depend
             headers={"Content-Disposition": f"attachment; filename={resume.title}.md"}
         )
     elif format == "pdf":
-        buffer = generate_pdf_from_markdown(content)
+        buffer = generate_pdf_from_markdown(content, getattr(resume, "template_type", "standard"))
         return StreamingResponse(
             buffer, 
             media_type="application/pdf", 

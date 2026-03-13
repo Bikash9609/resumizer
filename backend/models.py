@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -33,6 +33,7 @@ class GeneratedResume(Base):
     job_description = Column(Text)
     custom_instructions = Column(String, nullable=True)
     title = Column(String)
+    template_type = Column(String, default="standard")
     
     # Store standard markdown directly
     generated_markdown = Column(Text, nullable=True)

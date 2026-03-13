@@ -32,11 +32,12 @@ export const fetchResumes = async (userId: number) => {
   return res.data;
 };
 
-export const generateResume = async (baseContextId: number, jd: string, instructions: string, title: string) => {
+export const generateResume = async (baseContextId: number, jd: string, instructions: string, title: string, templateType: string = 'standard') => {
   const res = await api.post(`/resumes/generate?base_context_id=${baseContextId}`, {
     job_description: jd,
     custom_instructions: instructions,
-    title
+    title,
+    template_type: templateType
   });
   return res.data;
 };
