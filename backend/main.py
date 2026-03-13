@@ -1,0 +1,173 @@
+import os
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+import uuid
+
+import models, schemas
+from database import engine, get_db
+from utils import extract_text_from_pdf
+from ai_service import generate_tailored_resume
+
+# Create all tables in the database
+models.Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="Resumizer API")
+
+# Allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+TEMP_DIR = "temp_resumes"
+os.makedirs(TEMP_DIR, exist_ok=True)
+
+
+@app.post("/api/auth/register", response_model=schemas.UserResponse)
+def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    # Very simple mock, no real hashing
+    db_user = db.query(models.User).filter(models.User.email == user.email).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Using fixed user logic for simplicity in local environments
+    new_user = models.User(
+        username=user.username,
+        email=user.email,
+        hashed_password=user.password # no real hashing for this prototype
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+
+@app.post("/api/resumes/upload", response_model=schemas.ResumeContextResponse)
+async def upload_resume(user_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Uploads a PDF resume, parses its text, and stores the context."""
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    temp_file_path = f"{TEMP_DIR}/{uuid.uuid4()}_{file.filename}"
+    with open(temp_file_path, "wb") as buffer:
+        buffer.write(await file.read())
+        
+    extracted_text = extract_text_from_pdf(temp_file_path)
+    if not extracted_text:
+        raise HTTPException(status_code=400, detail="Could not extract text from document.")
+        
+    # Save the base context
+    resume_context = models.ResumeContext(
+        user_id=user_id,
+        filename=file.filename,
+        extracted_text=extracted_text
+    )
+    db.add(resume_context)
+    db.commit()
+    db.refresh(resume_context)
+    
+    # Optionally delete temp pdf file
+    # os.remove(temp_file_path)
+    
+    return resume_context
+
+
+@app.get("/api/resumes", response_model=schemas.ResumeListResponse)
+def get_resumes(user_id: int, db: Session = Depends(get_db)):
+    """Lists all base contexts and generated resumes."""
+    contexts = db.query(models.ResumeContext).filter(models.ResumeContext.user_id == user_id).all()
+    generated = []
+    
+    # Collect all generated associated with base contexts
+    for ctx in contexts:
+        gens = db.query(models.GeneratedResume).filter(models.GeneratedResume.base_context_id == ctx.id).all()
+        generated.extend(gens)
+        
+    return {"resumes": contexts, "generated": generated}
+
+
+def _generate_task(gen_id: int, base_text: str, jd: str, instructions: str, db_session: Session):
+    """Background task to call LLM and update generated resume status."""
+    result = generate_tailored_resume(base_text, jd, instructions)
+    
+    resume = db_session.query(models.GeneratedResume).filter(models.GeneratedResume.id == gen_id).first()
+    if resume:
+        resume.generated_markdown = result
+        resume.status = "completed"
+        db_session.commit()
+    db_session.close()
+
+@app.post("/api/resumes/generate", response_model=schemas.GeneratedResumeResponse)
+def generate_resume(
+    request: schemas.GeneratedResumeBase, 
+    base_context_id: int, 
+    background_tasks: BackgroundTasks, 
+    db: Session = Depends(get_db)
+):
+    """Initiates an asynchronous resume generation based on JD."""
+    ctx = db.query(models.ResumeContext).filter(models.ResumeContext.id == base_context_id).first()
+    if not ctx:
+        raise HTTPException(status_code=404, detail="Base resume context not found")
+        
+    new_gen = models.GeneratedResume(
+        base_context_id=base_context_id,
+        job_description=request.job_description,
+        custom_instructions=request.custom_instructions or "",
+        title=request.title,
+        status="generating"
+    )
+    db.add(new_gen)
+    db.commit()
+    db.refresh(new_gen)
+    
+    # Use a fresh session for the background task
+    bg_db = next(get_db())
+    background_tasks.add_task(
+        _generate_task, 
+        new_gen.id, 
+        ctx.extracted_text, 
+        request.job_description, 
+        request.custom_instructions or "", 
+        bg_db
+    )
+    
+from fastapi.responses import StreamingResponse
+from formatters import generate_pdf_from_markdown, generate_docx_from_markdown
+
+@app.get("/api/resumes/{generated_id}/download")
+def download_resume(generated_id: int, format: str = "pdf", db: Session = Depends(get_db)):
+    """Downloads a generated resume in the requested format (pdf, docx, md)."""
+    resume = db.query(models.GeneratedResume).filter(models.GeneratedResume.id == generated_id).first()
+    
+    if not resume or not resume.generated_markdown:
+        raise HTTPException(status_code=404, detail="Resume not found or not yet generated")
+        
+    content = resume.generated_markdown
+    
+    if format == "md":
+        return StreamingResponse(
+            iter([content]), 
+            media_type="text/markdown", 
+            headers={"Content-Disposition": f"attachment; filename={resume.title}.md"}
+        )
+    elif format == "pdf":
+        buffer = generate_pdf_from_markdown(content)
+        return StreamingResponse(
+            buffer, 
+            media_type="application/pdf", 
+            headers={"Content-Disposition": f"attachment; filename={resume.title}.pdf"}
+        )
+    elif format == "docx":
+        buffer = generate_docx_from_markdown(content)
+        return StreamingResponse(
+            buffer, 
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
+            headers={"Content-Disposition": f"attachment; filename={resume.title}.docx"}
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Invalid format requested. Try 'pdf', 'docx', or 'md'.")
