@@ -27,8 +27,9 @@ export const uploadResume = async (userId: number, file: File) => {
   return res.data;
 };
 
-export const fetchResumes = async (userId: number) => {
-  const res = await api.get(`/resumes?user_id=${userId}`);
+export const fetchResumes = async (userId: number, q: string = '') => {
+  const url = `/resumes?user_id=${userId}${q ? `&q=${encodeURIComponent(q)}` : ''}`;
+  const res = await api.get(url);
   return res.data;
 };
 
@@ -44,4 +45,13 @@ export const generateResume = async (baseContextId: number, jd: string, instruct
 
 export const downloadUrl = (id: number, format: 'pdf' | 'docx' | 'md') => {
   return `${API_URL}/resumes/${id}/download?format=${format}`;
+};
+
+export const deleteGeneratedResume = async (id: number) => {
+  const res = await api.delete(`/resumes/generated/${id}`);
+  return res.data;
+};
+
+export const downloadBaseUrl = (id: number) => {
+  return `${API_URL}/resumes/base/${id}/download`;
 };

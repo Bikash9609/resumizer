@@ -81,15 +81,39 @@ async def upload_resume(user_id: int, file: UploadFile = File(...), db: Session 
 
 
 @app.get("/api/resumes", response_model=schemas.ResumeListResponse)
-def get_resumes(user_id: int, db: Session = Depends(get_db)):
-    """Lists all base contexts and generated resumes."""
-    contexts = db.query(models.ResumeContext).filter(models.ResumeContext.user_id == user_id).all()
-    generated = []
+def get_resumes(user_id: int, q: str = None, db: Session = Depends(get_db)):
+    """Lists all base contexts and generated resumes, with optional search."""
+    from sqlalchemy import or_
     
-    # Collect all generated associated with base contexts
-    for ctx in contexts:
-        gens = db.query(models.GeneratedResume).filter(models.GeneratedResume.base_context_id == ctx.id).all()
-        generated.extend(gens)
+    db_contexts = db.query(models.ResumeContext).filter(models.ResumeContext.user_id == user_id).all()
+    if not db_contexts:
+        return {"resumes": [], "generated": []}
+        
+    ctx_ids = [c.id for c in db_contexts]
+    
+    if q:
+        q_filter = f"%{q}%"
+        contexts = db.query(models.ResumeContext).filter(
+            models.ResumeContext.user_id == user_id,
+            or_(
+                models.ResumeContext.filename.ilike(q_filter),
+                models.ResumeContext.extracted_text.ilike(q_filter)
+            )
+        ).all()
+        
+        generated = db.query(models.GeneratedResume).filter(
+            models.GeneratedResume.base_context_id.in_(ctx_ids),
+            or_(
+                models.GeneratedResume.title.ilike(q_filter),
+                models.GeneratedResume.generated_markdown.ilike(q_filter),
+                models.GeneratedResume.job_description.ilike(q_filter)
+            )
+        ).all()
+    else:
+        contexts = db_contexts
+        generated = db.query(models.GeneratedResume).filter(
+            models.GeneratedResume.base_context_id.in_(ctx_ids)
+        ).all()
         
     return {"resumes": contexts, "generated": generated}
 
@@ -100,11 +124,32 @@ def _generate_task(gen_id: int, base_text: str, jd: str, instructions: str, temp
     
     resume = db_session.query(models.GeneratedResume).filter(models.GeneratedResume.id == gen_id).first()
     if resume:
-        resume.generated_markdown = result
         if result == "Error generating resume.":
+            resume.generated_markdown = result
             resume.status = "failed"
         else:
+            import re
+            
+            title = resume.title  # Fallback to requested title
+            markdown_content = result
+            
+            # Extract TITLE
+            title_match = re.search(r"TITLE:\s*(.+)", result, re.IGNORECASE)
+            if title_match:
+                title = title_match.group(1).strip()
+                
+            # Split by ---
+            parts = re.split(r"^---+\s*$", result, maxsplit=1, flags=re.MULTILINE)
+            if len(parts) > 1:
+                markdown_content = parts[1].strip()
+            else:
+                # If separator not found, just remove the title line
+                markdown_content = re.sub(r"TITLE:\s*.+", "", result, flags=re.IGNORECASE).strip()
+            
+            resume.title = title
+            resume.generated_markdown = markdown_content
             resume.status = "completed"
+            
         db_session.commit()
     db_session.close()
 
@@ -145,7 +190,33 @@ def generate_resume(
     )
 
     return new_gen
-    
+
+
+@app.delete("/api/resumes/generated/{generated_id}")
+def delete_generated_resume(generated_id: int, db: Session = Depends(get_db)):
+    """Deletes a generated resume."""
+    resume = db.query(models.GeneratedResume).filter(models.GeneratedResume.id == generated_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+        
+    db.delete(resume)
+    db.commit()
+    return {"message": "Resume deleted successfully"}
+
+
+@app.get("/api/resumes/base/{base_id}/download")
+def download_base_resume(base_id: int, db: Session = Depends(get_db)):
+    """Downloads a base resume's extracted text."""
+    resume = db.query(models.ResumeContext).filter(models.ResumeContext.id == base_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Base resume not found")
+        
+    return StreamingResponse(
+        iter([resume.extracted_text]), 
+        media_type="text/plain", 
+        headers={"Content-Disposition": f"attachment; filename={resume.filename}_extracted.txt"}
+    )
+
 
 @app.get("/api/resumes/{generated_id}/download")
 def download_resume(generated_id: int, format: str = "pdf", db: Session = Depends(get_db)):
