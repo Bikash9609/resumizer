@@ -59,3 +59,38 @@ def generate_tailored_resume(
     except Exception as e:
         print(f"Error generating resume with LiteLLM: {e}")
         return "Error generating resume."
+
+def update_resume_section(section_text: str, custom_instructions: str, full_markdown: str) -> str:
+    """
+    Leverages LiteLLM to update a specific section of the resume.
+    """
+    system_prompt = "You are an expert resume writer and career coach. Your goal is to rewrite a specific section of a user's resume according to their instructions. You will be given the full resume for context, the specific section to rewrite, and the instructions. Output ONLY the rewritten section in markdown format. Do not include any other text."
+    user_prompt = f"""
+Full Resume Context:
+{full_markdown}
+
+---
+Section to Rewrite:
+{section_text}
+
+---
+Instructions:
+{custom_instructions}
+
+Please rewrite the section based on the instructions. Output ONLY the rewritten section markdown.
+"""
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    try:
+        response = litellm.completion(
+            model="ollama/llama3.2:latest",
+            messages=messages,
+            api_base="http://localhost:11434",
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Error updating resume section with LiteLLM: {e}")
+        return section_text  # return original if error

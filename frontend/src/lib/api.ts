@@ -52,6 +52,28 @@ export const deleteGeneratedResume = async (id: number) => {
   return res.data;
 };
 
+export const getGeneratedResume = async (id: number) => {
+  const res = await api.get(`/resumes/generated/${id}`);
+  return res.data;
+};
+
+export const updateResumeMarkdown = async (id: number, markdown: string, title?: string) => {
+  const res = await api.put(`/resumes/generated/${id}`, {
+    section_text: markdown, // using section_text from schema to hold full markdown as per backend
+    custom_instructions: 'manual update',
+    title: title
+  });
+  return res.data;
+};
+
+export const updateResumeSection = async (id: number, sectionText: string, instructions: string) => {
+  const res = await api.post(`/resumes/generated/${id}/update-section`, {
+    section_text: sectionText,
+    custom_instructions: instructions
+  });
+  return res.data;
+};
+
 export const downloadBaseUrl = (id: number) => {
   return `${API_URL}/resumes/base/${id}/download`;
 };

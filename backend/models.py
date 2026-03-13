@@ -42,3 +42,14 @@ class GeneratedResume(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     base_context = relationship("ResumeContext", back_populates="generated_resumes")
+    versions = relationship("ResumeVersion", back_populates="generated_resume", cascade="all, delete-orphan")
+
+class ResumeVersion(Base):
+    __tablename__ = "resume_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    generated_resume_id = Column(Integer, ForeignKey("generated_resumes.id"))
+    markdown_content = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    generated_resume = relationship("GeneratedResume", back_populates="versions")

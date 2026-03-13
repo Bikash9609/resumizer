@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box, Center, Stack, Title, Text, Paper, Button,
+  Box, Stack, Title, Text, Paper, Button,
   ThemeIcon, Group, rem,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';

@@ -203,6 +203,74 @@ def delete_generated_resume(generated_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Resume deleted successfully"}
 
+@app.get("/api/resumes/generated/{generated_id}", response_model=schemas.GeneratedResumeResponse)
+def get_generated_resume(generated_id: int, db: Session = Depends(get_db)):
+    """Gets a generated resume by ID, including its versions."""
+    resume = db.query(models.GeneratedResume).filter(models.GeneratedResume.id == generated_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    return resume
+
+@app.put("/api/resumes/generated/{generated_id}", response_model=schemas.GeneratedResumeResponse)
+def update_generated_resume(
+    generated_id: int, 
+    request: schemas.SectionUpdateRequest,
+    db: Session = Depends(get_db)
+):
+    """Saves manual edits to the entire markdown, creating a new version."""
+    resume = db.query(models.GeneratedResume).filter(models.GeneratedResume.id == generated_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+        
+    # Create new version with CURRENT content before changing
+    new_version = models.ResumeVersion(
+        generated_resume_id=resume.id,
+        markdown_content=resume.generated_markdown
+    )
+    db.add(new_version)
+    
+    # Update resume with new entire markdown (passed in `section_text` for simplicity, or we can use a new schema)
+    # Using section_text to carry the full markdown here based on the instructions
+    resume.generated_markdown = request.section_text
+    if request.title:
+        resume.title = request.title
+    db.commit()
+    db.refresh(resume)
+    return resume
+
+@app.post("/api/resumes/generated/{generated_id}/update-section", response_model=schemas.GeneratedResumeResponse)
+def update_resume_section_api(
+    generated_id: int, 
+    request: schemas.SectionUpdateRequest,
+    db: Session = Depends(get_db)
+):
+    """Uses AI to update a specific section of the generated resume."""
+    resume = db.query(models.GeneratedResume).filter(models.GeneratedResume.id == generated_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+        
+    from ai_service import update_resume_section
+    new_section_text = update_resume_section(
+        request.section_text, 
+        request.custom_instructions, 
+        resume.generated_markdown or ""
+    )
+    
+    # Create new version with CURRENT content
+    new_version = models.ResumeVersion(
+        generated_resume_id=resume.id,
+        markdown_content=resume.generated_markdown
+    )
+    db.add(new_version)
+    
+    # Replace old section with new section
+    if resume.generated_markdown:
+        resume.generated_markdown = resume.generated_markdown.replace(request.section_text, new_section_text)
+        
+    db.commit()
+    db.refresh(resume)
+    return resume
+
 
 @app.get("/api/resumes/base/{base_id}/download")
 def download_base_resume(base_id: int, db: Session = Depends(get_db)):

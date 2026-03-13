@@ -18,14 +18,29 @@ class GeneratedResumeCreate(BaseModel):
     title: str
     template_type: str = "standard"
 
+class ResumeVersionResponse(BaseModel):
+    id: int
+    generated_resume_id: int
+    markdown_content: str
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
 class GeneratedResumeResponse(GeneratedResumeCreate):
     id: int
     base_context_id: int
     generated_markdown: Optional[str] = None
     status: str
     created_at: datetime
+    versions: Optional[List[ResumeVersionResponse]] = []
     class Config:
         from_attributes = True
+
+class SectionUpdateRequest(BaseModel):
+    section_text: str
+    custom_instructions: str
+    title: Optional[str] = None
+    action: str = "update" # can be 'update', etc.
 
 class UserBase(BaseModel):
     username: str
